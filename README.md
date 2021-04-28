@@ -1,2 +1,2 @@
 # sinogram
-Create CT sinogram from a photo
+Compute CT sinogram based on a PNG image.
