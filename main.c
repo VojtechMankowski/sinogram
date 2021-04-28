@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <math.h>
-
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -10,32 +9,32 @@ enum CHANNELS { RED, GREEN, BLUE, ALPHA, NUM_CHANNELS };
 
 void draw_image(unsigned char* data, int width, int height, int channels, enum CHANNELS offset);
 
-void rotate_image(unsigned char* data, float angle_deg, int width, int height, int channels, enum CHANNELS offset);
+void rotate_image(unsigned char* data, double angle_deg, int width, int height, int channels, enum CHANNELS offset);
 
-void rotate_position(float* x, float* y, int pixel_num, float angle_deg, int width, int height);
+void rotate_position(double* x, double* y, int pixel_num, double angle_deg, int width, int height);
 
-unsigned char nearest_neighbour(unsigned char* data, float x, float y, int width, int height, int channels, enum CHANNELS offset);
+unsigned char nearest_neighbour(unsigned char* data, double x, double y, int width, int height, int channels, enum CHANNELS offset);
 
 
 int main(void) {
 
     int width, height, channels;
-    char * filename = "letterR.png";
+    char * filename = "letters.png";
     unsigned char *data = stbi_load(filename, &width, &height, &channels, 0);
     
     enum CHANNELS offset = RED;
 
-    float angle_deg = 30;
+    double angle_deg = -30.0;
     
-    draw_image(data, width, height, channels, offset);
+    // draw_image(data, width, height, channels, offset);
 
-    for (int c = 0; c < NUM_CHANNELS; c ++) {
+    for ( int c = 0; c < NUM_CHANNELS; c++ ) {
         rotate_image(data, angle_deg, width, height, channels, (enum CHANNELS)c);
     }
 
-    printf("\n\nROTATED:\n\n");
+    // printf("\n\nROTATED:\n\n");
 
-    draw_image(data, width, height, channels, offset);
+    // draw_image(data, width, height, channels, offset);
 
     stbi_write_png("written.png", width, height, channels, data, width*channels);
 
@@ -62,10 +61,10 @@ void draw_image(unsigned char* data, int width, int height, int channels, enum C
         }
 }
 
-void rotate_image(unsigned char* data, float angle_deg, int width, int height, int channels, enum CHANNELS offset) {
+void rotate_image(unsigned char* data, double angle_deg, int width, int height, int channels, enum CHANNELS offset) {
     int pixel_num, rot_pixel_num;
     int N = width*height;
-    float x,y;
+    double x,y;
     unsigned char val;
 
     for (pixel_num = 0; pixel_num < N; pixel_num++) {
@@ -76,12 +75,12 @@ void rotate_image(unsigned char* data, float angle_deg, int width, int height, i
         val = nearest_neighbour(data, x, y, width, height, channels, offset);
 
         // 3. assign value
-        *(data + 4*pixel_num + offset) = val;
+        *(data + channels*pixel_num + offset) = val;
     }
 }
 
-void rotate_position(float* x, float* y, int pixel_num, float angle, int width, int height) {
-    float x_rot, y_rot;
+void rotate_position(double* x, double* y, int pixel_num, double angle, int width, int height) {
+    double x_rot, y_rot;
     
     /* convert to radians */
     angle *= ( M_PI / 180.0 );
@@ -91,22 +90,22 @@ void rotate_position(float* x, float* y, int pixel_num, float angle, int width, 
     *y = pixel_num / width;
 
     /* center around middle of image */
-    *x = *x - 0.5*(float)width;
-    *y = *y - 0.5*(float)height;
+    *x = *x - 1.0*width;
+    *y = *y - 1.0*height;
 
     /* compute pixel position after rotation */
     x_rot = (*x) * cos(angle) - (*y) * sin(angle);
     y_rot = (*x) * sin(angle) + (*y) * cos(angle);
     
     /* move origin back to (0,0)*/
-    x_rot = round(x_rot + 0.5*(float)width);
-    y_rot = round(y_rot + 0.5*(float)height);
+    x_rot = x_rot + 1.0*width;
+    y_rot = y_rot + 1.0*height;
 
     *x = x_rot;
     *y = y_rot;
 }
 
-unsigned char nearest_neighbour(unsigned char* data, float x, float y, int width, int height, int channels, enum CHANNELS offset) {
+unsigned char nearest_neighbour(unsigned char* data, double x, double y, int width, int height, int channels, enum CHANNELS offset) {
     int pixel_num;
     unsigned char val;
 
