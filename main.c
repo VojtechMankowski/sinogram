@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <math.h>
+#include <time.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -15,8 +16,13 @@ void rotate_position(double* x, double* y, int pixel_num, double angle_deg, int 
 
 unsigned char nearest_neighbour(unsigned char* data, double x, double y, int width, int height, int channels, enum CHANNELS offset);
 
+unsigned char bilinear_interp(unsigned char* data, double x, double y, int width, int height, int channels, enum CHANNELS offset);
 
 int main(void) {
+    clock_t start, end;
+    double cpu_time_used;
+    
+    start = clock();
 
     int width, height, channels;
     char * filename = "letters.png";
@@ -52,6 +58,10 @@ int main(void) {
     stbi_image_free(data);
     free(rot_data);
 
+    end = clock();
+    cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+    printf("Program took %f seconds to execute.\n", cpu_time_used);
+
     getchar();
     return 0;
 }
@@ -84,7 +94,8 @@ void rotate_image(unsigned char* rot_data, unsigned char* data, double angle_deg
         rotate_position(&x, &y, pixel_num, angle_deg, width, height);
 
         // 2. compute value (NEAREST)
-        val = nearest_neighbour(data, x, y, width, height, channels, offset);
+        // val = nearest_neighbour(data, x, y, width, height, channels, offset);
+        val = bilinear_interp(data, x, y, width, height, channels, offset);
 
         // 3. assign value
         *(rot_data + channels*pixel_num + offset) = val;
@@ -129,5 +140,39 @@ unsigned char nearest_neighbour(unsigned char* data, double x, double y, int wid
     y = round(y);
     pixel_num = x + y*width;
     val = *(data + channels*pixel_num + offset); 
+    return val;
+}
+
+unsigned char bilinear_interp(unsigned char* data, double x, double y, int width, int height, int channels, enum CHANNELS offset) {
+    int pixel_num;
+    unsigned char val = 0;
+    float val1, val2, val3, val4;
+    float val12, val34;
+
+    if ( x < 0.0 || y < 0.0 || x > (width-1) || y > (height-1) ) {
+        return val;
+    }
+    
+    /* left top corner */
+    pixel_num = floor(x) + floor(y)*width;
+    val1 = (float) *(data + channels*pixel_num + offset);
+
+    /* right top corner */
+    pixel_num = ceil(x) + floor(y)*width;
+    val2 = (float) *(data + channels*pixel_num + offset);
+    
+    /* left bottom corner */
+    pixel_num = floor(x) + ceil(y)*width;
+    val3 = (float) *(data + channels*pixel_num + offset);
+    
+    /* right bottom corner*/
+    pixel_num = ceil(x) + ceil(y)*width;
+    val4 = (float) *(data + channels*pixel_num + offset);
+    
+    /* for pixel grid the denominator (x2-x1) = 1 */
+    val12 = val1 + (val2-val1)*(x-floor(x));
+    val34 = val3 + (val4-val3)*(x-floor(x));
+
+    val = (unsigned char) round( val12 + (val34-val12)*(y-floor(y)) );
     return val;
 }
