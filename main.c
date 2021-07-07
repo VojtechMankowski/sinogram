@@ -10,7 +10,9 @@ enum CHANNELS { RED, GREEN, BLUE, ALPHA, NUM_CHANNELS };
 
 void draw_channel(unsigned char* input_image, int width, int height, int channels, enum CHANNELS offset);
 
-void rotate_image(unsigned char* rot_input_image, unsigned char* input_image, double angle_deg, int width, int height, int channels, enum CHANNELS offset);
+void size_of_rotated_image(int* width_rot, int* height_rot, int height, int width, double angle_deg);
+
+void rotate_image(unsigned char* rotated_image, unsigned char* input_image, double angle_deg, int width, int height, int channels, enum CHANNELS offset);
 
 void rotate_position(double* x, double* y, int pixel_num, double angle_deg, int width, int height);
 
@@ -25,10 +27,11 @@ int main(void) {
     start_time = clock();
 
     int width, height, channels;
+    int width_rot = 0, height_rot = 0;
     char * filename = "letters.png";
     char output_filename[20];
     unsigned char *input_image = stbi_load(filename, &width, &height, &channels, 0);
-    int angles = 180;
+    int angles = 10;
     enum CHANNELS offset = RED;
     double angle_deg = 30.0;
 
@@ -36,30 +39,45 @@ int main(void) {
     // draw_channel(input_image, width, height, channels, offset);
 
     /* allocate N bytes for rotated image */
-    unsigned char* rot_input_image = malloc(width*height*channels);
-    memcpy(rot_input_image, input_image, width*height*channels);
+    // unsigned char* rotated_image = malloc(width*height*channels);
+
+    // memcpy(rotated_image, input_image, width*height*channels);
     /* Alternative to MEMCPY: */
     // for (int i = 0; i < width*height*channels; i++){
-    //     *(rot_input_image+i) = *(input_image+i);
+    //     *(rotated_image+i) = *(input_image+i);
     // }
 
     /* allocate bytes for sinogram image */
     unsigned char* sinogram = malloc(angles*height*channels);
 
-    for (angle_deg = 0.0; angle_deg < angles; angle_deg += 30) {
+    for (angle_deg = 0.0; angle_deg < angles; angle_deg += 1) {
         
+        /* compute size of rotated image */
+        size_of_rotated_image(&width_rot, &height_rot, height, width, angle_deg);
+
+        /* allocate memory for rotated image */
+        unsigned char* rotated_image = malloc(width_rot*height_rot*channels);
+
+        /* set black image */
+        for (int i = 0; i < width_rot*height_rot*channels; i++){
+            *(rotated_image+i) = 0;
+        }
+
+        /* loop through all image channels */
         for ( int c = 0; c < NUM_CHANNELS; c++ ) {
-            rotate_image(rot_input_image, input_image, angle_deg, width, height, channels, (enum CHANNELS)c);
+            rotate_image(rotated_image, input_image, angle_deg, width, height, channels, (enum CHANNELS)c);
         }
 
         sprintf(output_filename, "rotated%d.png", (int)angle_deg);
         printf("%s\n", output_filename);
 
-        stbi_write_png(output_filename, width, height, channels, rot_input_image, width*channels);
-    }
+        stbi_write_png(output_filename, width_rot, height_rot, channels, rotated_image, width_rot*channels);
 
+        free(rotated_image);
+    }
+    
     stbi_image_free(input_image);
-    free(rot_input_image);
+    
     free(sinogram);
 
     cpu_time_used = ((double) (clock() - start_time)) / CLOCKS_PER_SEC;
@@ -86,7 +104,43 @@ void draw_channel(unsigned char* input_image, int width, int height, int channel
         }
 }
 
-void rotate_image(unsigned char* rot_input_image, unsigned char* input_image, double angle_deg, int width, int height, int channels, enum CHANNELS offset) {
+void size_of_rotated_image(int* width_rot, int* height_rot, int height, int width, double angle) {
+    double x[4], y[4];
+    double x_rot[4], y_rot[4];
+
+    /* convert to radians */
+    angle *= ( M_PI / 180.0 );
+
+    /* define 4 corners */
+    x[0] = -0.5*(double)width;
+    x[1] = -x[0];
+    x[2] = x[1];
+    x[3] = x[0];
+
+    y[0] = 0.5*(double)height;
+    y[1] = y[0];
+    y[2] = -y[1];
+    y[3] = y[2];
+
+    /* find rotated positions */
+    x_rot[0] = x[0] * cos(angle) - y[0] * sin(angle);
+    y_rot[0] = x[0] * sin(angle) + y[0] * cos(angle);
+
+    x_rot[1] = x[1] * cos(angle) - y[1] * sin(angle);
+    y_rot[1] = x[1] * sin(angle) + y[1] * cos(angle);
+
+    x_rot[2] = x[2] * cos(angle) - y[2] * sin(angle);
+    y_rot[2] = x[2] * sin(angle) + y[2] * cos(angle);
+
+    x_rot[3] = x[3] * cos(angle) - y[3] * sin(angle);
+    y_rot[3] = x[3] * sin(angle) + y[3] * cos(angle);
+
+    /* get maximum width and height */
+    *(width_rot) = (int) 2 * round( fmax( fmax(abs(x_rot[0]), abs(x_rot[1])), fmax(abs(x_rot[2]), abs(x_rot[3])) ) );
+    *(height_rot) = (int) 2 * round( fmax( fmax(abs(y_rot[0]), abs(y_rot[1])), fmax(abs(y_rot[2]), abs(y_rot[3])) ) );
+}
+
+void rotate_image(unsigned char* rotated_image, unsigned char* input_image, double angle_deg, int width, int height, int channels, enum CHANNELS offset) {
     int pixel_num, rot_pixel_num;
     int N = width*height;
     double x,y;
@@ -101,7 +155,7 @@ void rotate_image(unsigned char* rot_input_image, unsigned char* input_image, do
         // val = bil inear_interp(input_image, x, y, width, height, channels, offset);
 
         // 3. assign value
-        *(rot_input_image + channels*pixel_num + offset) = val;
+        *(rotated_image + channels*pixel_num + offset) = val;
     }
 }
 
