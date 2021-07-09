@@ -12,9 +12,9 @@ void draw_channel(unsigned char* input_image, int width, int height, int channel
 
 void size_of_rotated_image(int* width_rot, int* height_rot, int height, int width, double angle_deg);
 
-void rotate_image(unsigned char* rotated_image, unsigned char* input_image, double angle_deg, int width, int height, int channels, enum CHANNELS offset);
+void rotate_image(unsigned char* rotated_image, unsigned char* input_image, double angle_deg, int width, int height, int width_rot, int height_rot, int channels, enum CHANNELS offset);
 
-void rotate_position(double* x, double* y, int pixel_num, double angle_deg, int width, int height);
+void rotate_position(double* x, double* y, int pixel_num, double angle_deg, int width_rot, int height_rot, int width, int height);
 
 unsigned char nearest_neighbour(unsigned char* input_image, double x, double y, int width, int height, int channels, enum CHANNELS offset);
 
@@ -31,7 +31,7 @@ int main(void) {
     char * filename = "letters.png";
     char output_filename[20];
     unsigned char *input_image = stbi_load(filename, &width, &height, &channels, 0);
-    int angles = 10;
+    int angles = 181;
     enum CHANNELS offset = RED;
     double angle_deg = 30.0;
 
@@ -50,7 +50,7 @@ int main(void) {
     /* allocate bytes for sinogram image */
     unsigned char* sinogram = malloc(angles*height*channels);
 
-    for (angle_deg = 0.0; angle_deg < angles; angle_deg += 1) {
+    for (angle_deg = 0.0; angle_deg < angles; angle_deg += 10) {
         
         /* compute size of rotated image */
         size_of_rotated_image(&width_rot, &height_rot, height, width, angle_deg);
@@ -65,7 +65,7 @@ int main(void) {
 
         /* loop through all image channels */
         for ( int c = 0; c < NUM_CHANNELS; c++ ) {
-            rotate_image(rotated_image, input_image, angle_deg, width, height, channels, (enum CHANNELS)c);
+            rotate_image(rotated_image, input_image, angle_deg, width, height, width_rot, height_rot, channels, (enum CHANNELS)c);
         }
 
         sprintf(output_filename, "rotated%d.png", (int)angle_deg);
@@ -140,44 +140,44 @@ void size_of_rotated_image(int* width_rot, int* height_rot, int height, int widt
     *(height_rot) = (int) 2 * round( fmax( fmax(abs(y_rot[0]), abs(y_rot[1])), fmax(abs(y_rot[2]), abs(y_rot[3])) ) );
 }
 
-void rotate_image(unsigned char* rotated_image, unsigned char* input_image, double angle_deg, int width, int height, int channels, enum CHANNELS offset) {
-    int pixel_num, rot_pixel_num;
-    int N = width*height;
+void rotate_image(unsigned char* rotated_image, unsigned char* input_image, double angle_deg, int width, int height, int width_rot, int height_rot, int channels, enum CHANNELS offset) {
+    int pixel_num;
+    int N = width_rot*height_rot;
     double x,y;
     unsigned char val;
 
     for (pixel_num = 0; pixel_num < N; pixel_num++) {
         // 1. find rotated position
-        rotate_position(&x, &y, pixel_num, angle_deg, width, height);
+        rotate_position(&x, &y, pixel_num, angle_deg, width_rot, height_rot, width, height);
 
         // 2. compute value (NEAREST)
         val = nearest_neighbour(input_image, x, y, width, height, channels, offset);
-        // val = bil inear_interp(input_image, x, y, width, height, channels, offset);
+        // val = bilinear_interp(input_image, x, y, width, height, channels, offset);
 
         // 3. assign value
         *(rotated_image + channels*pixel_num + offset) = val;
     }
 }
 
-void rotate_position(double* x, double* y, int pixel_num, double angle, int width, int height) {
+void rotate_position(double* x, double* y, int pixel_num, double angle, int width_rot, int height_rot, int width, int height) {
     double x_rot, y_rot;
     
     /* convert to radians */
     angle *= ( M_PI / 180.0 );
     
     /* compute pixel position*/
-    *x = pixel_num % width;
-    *y = pixel_num / width;
+    *x = pixel_num % width_rot;
+    *y = pixel_num / width_rot;
 
     /* center around middle of image */
-    *x = *x - 0.5*width;
-    *y = *y - 0.5*height;
+    *x = *x - 0.5*width_rot;
+    *y = *y - 0.5*height_rot;
 
     /* compute pixel position after rotation */
     x_rot = (*x) * cos(angle) - (*y) * sin(angle);
     y_rot = (*x) * sin(angle) + (*y) * cos(angle);
     
-    /* move origin back to (0,0)*/
+    /* move origin back to (0,0) in coords of input image*/
     x_rot = x_rot + 0.5*width;
     y_rot = y_rot + 0.5*height;
 
@@ -188,7 +188,7 @@ void rotate_position(double* x, double* y, int pixel_num, double angle, int widt
 unsigned char nearest_neighbour(unsigned char* input_image, double x, double y, int width, int height, int channels, enum CHANNELS offset) {
     int pixel_num;
     unsigned char val = 0;
-    
+
     /* outside image case */
     if ( x < 0.0 || y < 0.0 || x > (width-1) || y > (height-1) ) {
         return val;
