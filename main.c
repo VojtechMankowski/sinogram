@@ -10,11 +10,13 @@ enum CHANNELS { RED, GREEN, BLUE, ALPHA, NUM_CHANNELS };
 
 void draw_channel(unsigned char* input_image, int width, int height, int channels, enum CHANNELS offset);
 
-void size_of_rotated_image(int* width_rot, int* height_rot, int height, int width, double angle_deg);
+void size_of_rotated_image(int* width_rot, int* height_rot, int height, int width, double angle_rad);
 
-void rotate_image(unsigned char* rotated_image, unsigned char* input_image, double angle_deg, int width, int height, int width_rot, int height_rot, int channels, enum CHANNELS offset);
+void rotate_image(unsigned char* rotated_image, unsigned char* input_image, double angle_rad, int width, int height, int width_rot, int height_rot, int channels, enum CHANNELS offset);
 
-void rotate_position(double* x, double* y, int pixel_num, double angle_deg, int width_rot, int height_rot, int width, int height);
+void rotate_position(double* x, double* y, int pixel_num, double angle_rad, int width_rot, int height_rot, int width, int height);
+
+void fill_sinogram(unsigned char* sinogram, int height_sin, int angles, unsigned char* rotated_image, int width_rot, int height_rot, int channels, int angle_deg, int angle_delta);
 
 unsigned char nearest_neighbour(unsigned char* input_image, double x, double y, int width, int height, int channels, enum CHANNELS offset);
 
@@ -28,12 +30,14 @@ int main(void) {
 
     int width, height, channels;
     int width_rot = 0, height_rot = 0;
-    char * filename = "letters.png";
+    char * filename = "square2.png";
     char output_filename[20];
     unsigned char *input_image = stbi_load(filename, &width, &height, &channels, 0);
-    int angles = 181;
+    int angle_deg, angle_max = 360, angle_delta = 10;
+    int angles = angle_max/angle_delta;
+    int height_sin;
     enum CHANNELS offset = RED;
-    double angle_deg = 30.0;
+    double angle_rad;
 
     /* Use as a check for small images */
     // draw_channel(input_image, width, height, channels, offset);
@@ -47,13 +51,23 @@ int main(void) {
     //     *(rotated_image+i) = *(input_image+i);
     // }
 
-    /* allocate bytes for sinogram image */
-    unsigned char* sinogram = malloc(angles*height*channels);
+    /* compute height for sinogram */
+    height_sin = sqrt(height*height + width*width);
 
-    for (angle_deg = 0.0; angle_deg < angles; angle_deg += 10) {
-        
+    /* allocate bytes for sinogram image */
+    unsigned char* sinogram = malloc(angles*height_sin*channels);
+
+    /* clean sinogram */
+    for (int i = 0; i < angles*height_sin*channels; i++){
+            *(sinogram+i) = 0;
+    }
+
+    for (angle_deg = 0; angle_deg < angle_max; angle_deg += angle_delta) {
+        /* convert to radians */
+        angle_rad = angle_deg * M_PI / 180.0;
+
         /* compute size of rotated image */
-        size_of_rotated_image(&width_rot, &height_rot, height, width, angle_deg);
+        size_of_rotated_image(&width_rot, &height_rot, height, width, angle_rad);
 
         /* allocate memory for rotated image */
         unsigned char* rotated_image = malloc(width_rot*height_rot*channels);
@@ -65,12 +79,16 @@ int main(void) {
 
         /* loop through all image channels */
         for ( int c = 0; c < NUM_CHANNELS; c++ ) {
-            rotate_image(rotated_image, input_image, angle_deg, width, height, width_rot, height_rot, channels, (enum CHANNELS)c);
+            rotate_image(rotated_image, input_image, angle_rad, width, height, width_rot, height_rot, channels, (enum CHANNELS)c);
         }
 
-        sprintf(output_filename, "rotated%d.png", (int)angle_deg);
+        /* fill sinogram with current rotated image */
+        fill_sinogram(sinogram, height_sin, angles, rotated_image, width_rot, height_rot, channels, angle_deg, angle_delta);
+
+        sprintf(output_filename, "rotated%d.png", angle_deg);
         printf("%s\n", output_filename);
 
+        /* save image */
         stbi_write_png(output_filename, width_rot, height_rot, channels, rotated_image, width_rot*channels);
 
         free(rotated_image);
@@ -78,6 +96,8 @@ int main(void) {
     
     stbi_image_free(input_image);
     
+    stbi_write_png("sinogram.png", angles, height_sin, channels, sinogram, (angles/angle_deg)*channels);
+
     free(sinogram);
 
     cpu_time_used = ((double) (clock() - start_time)) / CLOCKS_PER_SEC;
@@ -108,9 +128,6 @@ void size_of_rotated_image(int* width_rot, int* height_rot, int height, int widt
     double x[4], y[4];
     double x_rot[4], y_rot[4];
 
-    /* convert to radians */
-    angle *= ( M_PI / 180.0 );
-
     /* define 4 corners */
     x[0] = -0.5*(double)width;
     x[1] = -x[0];
@@ -140,7 +157,7 @@ void size_of_rotated_image(int* width_rot, int* height_rot, int height, int widt
     *(height_rot) = (int) 2 * round( fmax( fmax(abs(y_rot[0]), abs(y_rot[1])), fmax(abs(y_rot[2]), abs(y_rot[3])) ) );
 }
 
-void rotate_image(unsigned char* rotated_image, unsigned char* input_image, double angle_deg, int width, int height, int width_rot, int height_rot, int channels, enum CHANNELS offset) {
+void rotate_image(unsigned char* rotated_image, unsigned char* input_image, double angle, int width, int height, int width_rot, int height_rot, int channels, enum CHANNELS offset) {
     int pixel_num;
     int N = width_rot*height_rot;
     double x,y;
@@ -148,7 +165,7 @@ void rotate_image(unsigned char* rotated_image, unsigned char* input_image, doub
 
     for (pixel_num = 0; pixel_num < N; pixel_num++) {
         // 1. find rotated position
-        rotate_position(&x, &y, pixel_num, angle_deg, width_rot, height_rot, width, height);
+        rotate_position(&x, &y, pixel_num, angle, width_rot, height_rot, width, height);
 
         // 2. compute value (NEAREST)
         val = nearest_neighbour(input_image, x, y, width, height, channels, offset);
@@ -161,9 +178,6 @@ void rotate_image(unsigned char* rotated_image, unsigned char* input_image, doub
 
 void rotate_position(double* x, double* y, int pixel_num, double angle, int width_rot, int height_rot, int width, int height) {
     double x_rot, y_rot;
-    
-    /* convert to radians */
-    angle *= ( M_PI / 180.0 );
     
     /* compute pixel position*/
     *x = pixel_num % width_rot;
@@ -183,6 +197,35 @@ void rotate_position(double* x, double* y, int pixel_num, double angle, int widt
 
     *x = x_rot;
     *y = y_rot;
+}
+
+void fill_sinogram(unsigned char* sinogram, int height_sin, int angles, unsigned char* rotated_image, int width_rot, int height_rot, int channels, int angle_deg, int angle_delta) {
+    int pixel_num = 0;
+    int projection = 0;
+    int offset = 0;
+    int projection_offset = 0;
+
+    /* compute shift of the projection center relative to sinogram center (in height direction) */
+    projection_offset = (height_sin - height_rot) / 2;
+
+    /* for every channel ... */
+    for ( offset = 0; offset < NUM_CHANNELS; offset++ ) {
+        /* ... for every row ... */
+        for (int row = 0; row < height_rot; row++) {
+            /* ... project current row of rotated image ... */
+            for (int col = 0; col < width_rot; col++) {
+                pixel_num = col + row*width_rot;
+                projection += *(rotated_image + channels*pixel_num + offset);
+            }
+            projection /= width_rot; // scale to maintain within unsigned char
+
+            /* ... compute coresponding sinogram pixel */
+            pixel_num = (angle_deg/angle_delta) + (row + projection_offset)*angles; // analogue of: col_sin + row*width_sin
+            
+            /* ... and update sinogram with projection */
+            *(sinogram + channels*pixel_num + offset) = projection;
+        }
+    }
 }
 
 unsigned char nearest_neighbour(unsigned char* input_image, double x, double y, int width, int height, int channels, enum CHANNELS offset) {
