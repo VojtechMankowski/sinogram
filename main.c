@@ -30,7 +30,7 @@ int main(void) {
 
     int width, height, channels;
     int width_rot = 0, height_rot = 0;
-    char * filename = "square2.png";
+    char * filename = "square.png";
     char output_filename[20];
     unsigned char *input_image = stbi_load(filename, &width, &height, &channels, 0);
     int angle_deg, angle_max = 360, angle_delta = 10;
@@ -88,7 +88,7 @@ int main(void) {
         sprintf(output_filename, "rotated%d.png", angle_deg);
         printf("%s\n", output_filename);
 
-        /* save image */
+        /* save rotated image */
         stbi_write_png(output_filename, width_rot, height_rot, channels, rotated_image, width_rot*channels);
 
         free(rotated_image);
@@ -217,13 +217,15 @@ void fill_sinogram(unsigned char* sinogram, int height_sin, int angles, unsigned
                 pixel_num = col + row*width_rot;
                 projection += *(rotated_image + channels*pixel_num + offset);
             }
-            projection /= width_rot; // scale to maintain within unsigned char
+            projection /= height_sin; // scale to maintain value within unsigned char range
+            /* was previously normalized with width_rot but was non-uniform width changes with rotation */ 
 
             /* ... compute coresponding sinogram pixel */
             pixel_num = (angle_deg/angle_delta) + (row + projection_offset)*angles; // analogue of: col_sin + row*width_sin
             
             /* ... and update sinogram with projection */
             *(sinogram + channels*pixel_num + offset) = projection;
+            projection = 0;
         }
     }
 }
